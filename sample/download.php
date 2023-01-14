@@ -5,16 +5,11 @@ https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 */
 require_once('include.php');
 
-$file_id = (int) $_GET['file_id'];
-if(!$file_id) {
-	throw new \Exception('Missing id');
-}
+$wf = new WildFile($mysqli,STORAGE,'files');
 
-$sql = "SELECT `filename` FROM `files` WHERE `id`='$file_id'";
-$query = $mysqli->query($sql);
-if($rs = $query->fetch_object()) {
-	echo $rs->filename;
-}
-else {
-	throw new \Exception('File not found');
-}
+$file = $wf->get($_GET['file_id'],['mime','name']);
+
+header('Content-Type: '.$file->mime);
+header('Content-disposition: inline; filename="'.$file->name.'"');
+
+echo $file;

@@ -5,12 +5,7 @@ https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 */
 require_once('include.php');
 
-$file_id = (int) $_GET['file_id'];
-if(!$file_id) {
-	throw new \Exception('Missing id');
-}
-
-$sql = "DELETE FROM `files` WHERE `id`='$file_id'";
-$mysqli->query($sql);
+$wf = new WildFile($mysqli,STORAGE,'files');
+$wf->delete($_GET['file_id']);
 
 header('location: .');
