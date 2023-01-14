@@ -15,6 +15,13 @@ $fields['checksum'] = ['auto'=>WildFile::CHECKSUM];
 $fields['address'] = ['value'=>$_SERVER['REMOTE_ADDR']];
 $fields['created'] = ['value'=>'NOW()','noescape'=>true];
 
-$wf->store_post($_FILES['fileupload'],$fields);
+$sizecheck = function($tmp_name) {
+	$info = getimagesize($tmp_name);
+	if($info[0]!==256 || $info[1]!==256 || $info['mime']!=='image/jpeg') {
+		throw new \Exception('Wrong format! - Must be 256x256px image/jpeg');
+	}
+};
+
+$wf->store_post($_FILES['fileupload'],$fields); // ,$sizecheck
 
 header('location: .');

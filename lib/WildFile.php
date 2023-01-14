@@ -56,14 +56,15 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('store_string: '.$id.'|'.$path.$filename);
 	}
-	public function store_post($FILES,$field = []){
+	public function store_post($FILES,$field = [],$callback = null){
 		if(!is_array($FILES['tmp_name'])) {
-			$this->exception('Invalid Array');
+			$this->exception('Invalid post array');
 		}
 		if(empty($FILES['tmp_name'][0])) {
 			$this->exception('No files uploaded');
 		}
 		foreach($FILES['error'] as $key => $error) {
+			if($callback) $callback($FILES['tmp_name'][$key]);
 			if($error!==UPLOAD_ERR_OK) continue;
 			$checksum = md5_file($FILES['tmp_name'][$key]);
 			foreach($field as &$value) {
