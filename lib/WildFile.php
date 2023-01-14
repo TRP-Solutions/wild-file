@@ -140,13 +140,16 @@ class WildFile {
 			}
 		}
 	}
-	public function delete($id){
-		$this->validate_id($id);
-		$path = $this->get_path($id);
-		$filename = $this->filename($id);
-		$this->file_delete($path.$filename);
-		$this->db_delete($id);
-		$this->log('delete: '.$id.'|'.$path.$filename);
+	public function delete($array){
+		if(!is_array($array)) $array = [$array];
+		foreach($array as $id) {
+			$this->validate_id($id);
+			$path = $this->get_path($id);
+			$filename = $this->filename($id);
+			$this->file_delete($path.$filename);
+			$this->db_delete($id);
+			$this->log('delete: '.$id.'|'.$path.$filename);
+		}
 	}
 	private function db_delete($id){
 		$sql = "DELETE FROM $this->table WHERE `id`='$id'";
