@@ -1,0 +1,21 @@
+<?php
+/*
+SimpleAuth is licensed under the Apache License 2.0 license
+https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
+*/
+require_once('include.php');
+
+$wf = new WildFile($mysqli,STORAGE,'files');
+
+$zip = $wf->zip();
+foreach($_POST['zip'] as $id) {
+	$zip->add($id);
+}
+$zip->close();
+
+header('Content-Type: application/zip');
+header('Content-length: '.$zip->size);
+header('Content-disposition: attachment; filename="wf-download.zip"');
+
+$zip->output();
+$zip->unlink();

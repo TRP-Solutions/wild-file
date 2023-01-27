@@ -168,6 +168,9 @@ class WildFile {
 			}
 		}
 	}
+	public function zip(){
+		return new WildFileZip($this);
+	}
 	private function db_query($sql){
 		$query = $this->dbconn->query($sql);
 		if($this->dbconn->errno) {
@@ -225,7 +228,7 @@ class WildFile {
 }
 
 class WildFileOut {
-	private $file;
+	protected $file;
 	public function __construct($file){
 		$this->file = $file;
 	}
@@ -237,5 +240,39 @@ class WildFileOut {
 	}
 	public function get_path(){
 		return $this->file;
+	}
+}
+
+class WildFileZip extends WildFileOut {
+	private $wf;
+	private $archive;
+
+	public function __construct($wf){
+		$this->wf = $wf;
+		$file = tempnam(sys_get_temp_dir(), 'wfzip_');
+		$this->archive = new ZipArchive();
+		$result = $this->archive->open($file, ZipArchive::OVERWRITE);
+		if(!$result) {
+			throw new \Exception('Error open ZipArchive: '.$file);
+		}
+		$this->file = $file;
+	}
+	public function add($id,$name = null){
+		$file = $this->wf->get($id,$name ? [] : ['name']);
+		$result = $this->archive->addFile($file->get_path(),$name ? $name : $file->name);
+		if(!$result) {
+			throw new \Exception('Error addFile ZipArchive: '.$file->get_path());
+		}
+	}
+	public function close(){
+		$result = $this->archive->close();
+		if(!$result) {
+			throw new \Exception('Error close ZipArchive');
+		}
+		$this->size = filesize($this->file);
+	}
+	public function unlink(){
+		$this->archive = null;
+		unlink($this->file);
 	}
 }

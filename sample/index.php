@@ -19,8 +19,10 @@ if($mysqli->errno) {
 	$body->el('strong')->te($mysqli->error);
 }
 elseif($query->num_rows) {
-	$table = $body->el('table');
+	$form = $body->el('form',['action'=>'zip.php','method'=>'post']);
+	$table = $form->el('table');
 	$tr = $table->el('tr');
+	$tr->el('th');
 	$tr->el('th')->te('id');
 	$tr->el('th')->te('name');
 	$tr->el('th')->te('address');
@@ -29,23 +31,24 @@ elseif($query->num_rows) {
 	$tr->el('th')->at(['colspan'=>2])->te('function');
 	while($rs = $query->fetch_object()) {
 		$tr = $table->el('tr');
+		$tr->el('td')->el('input',['type'=>'checkbox','name'=>'zip[]','value'=>$rs->id]);
 		$tr->el('td')->te('#'.$rs->id);
 		$tr->el('td')->te($rs->name);
-		$tr->el('td')->te($rs->created);
 		$tr->el('td')->te($rs->address);
+		$tr->el('td')->te($rs->created);
 		$tr->el('td')->el('font',['color'=>'green'])->te('OK');
 		$onclick = "location.href='download.php?file_id=".$rs->id."'";
 		$tr->el('td')->el('button',['onclick'=>$onclick,'type'=>'button'])->te('download');
 		$onclick = "location.href='delete.php?file_id=".$rs->id."'";
 		$tr->el('td')->el('button',['onclick'=>$onclick,'type'=>'button'])->te('delete');
 	}
+	$form->el('input',['type'=>'submit','value'=>'Download ZIP']);
 }
 else {
 	$body->el('strong')->te('No files!');
 }
 
 $body->el('h2')->te('wild-file :: upload');
-
 $form = $body->el('form',['action'=>'upload.php','method'=>'post','enctype'=>'multipart/form-data']);
 $form->el('label',['for'=>'fileupload'])->te('Select file:');
 $form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required']);
