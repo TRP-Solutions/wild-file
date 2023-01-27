@@ -12,4 +12,4 @@ $file = $wf->get($_GET['file_id'],['mime','name']);
 header('Content-Type: '.$file->mime);
 header('Content-disposition: inline; filename="'.$file->name.'"');
 
-echo $file;
+$file->output();

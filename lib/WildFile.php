@@ -232,6 +232,9 @@ class WildFileOut {
 	public function __toString(){
 		return file_get_contents($this->file);
 	}
+	public function output(){
+		return readfile($this->file);
+	}
 	public function get_path(){
 		return $this->file;
 	}
