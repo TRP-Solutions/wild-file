@@ -15,7 +15,7 @@ class WildFile {
 	public const MIME = 3;
 	public const CHECKSUM = 4;
 
-	public function __construct($dbconn,$storage,$table){
+	public function __construct($dbconn,$storage,$table,$dir = null){
 		if(!is_int($dbconn->thread_id)) {
 			$this->exception('No DB Connection');
 		}
@@ -25,7 +25,7 @@ class WildFile {
 		}
 		$this->storage = $storage;
 		$table = explode('.',$table);
-		$this->dir = str_replace('`','',end($table));
+		$this->dir = empty($dir) ? str_replace('`','',end($table)) : $dir;
 		foreach($table as &$value) {
 			if(strpos($value,'`')===false) $value = '`'.$value.'`';
 		}
@@ -93,21 +93,8 @@ class WildFile {
 		}
 	}
 	private function db_store($dbfield){
-		$field = $value = [];
-
-		foreach($dbfield as $key => $var) {
-			$field[] = '`'.$this->dbconn->real_escape_string($key).'`';
-			if(isset($var['noescape']) && $var['noescape']===true) {
-				$value[] = $var['value'];
-			}
-			else {
-				$value[] = "'".$this->dbconn->real_escape_string($var['value'])."'";
-			}
-		}
-
-		$field = implode(',',$field);
-		$value = implode(',',$value);
-		$sql = "INSERT INTO $this->table ($field) VALUES ($value)";
+		$fieldset = $this->fieldset($dbfield);
+		$sql = "INSERT INTO $this->table SET $fieldset";
 		$this->db_query($sql);
 		return $this->dbconn->insert_id;
 	}
@@ -116,6 +103,40 @@ class WildFile {
 		if(file_put_contents($path.$filename.'.md5', $md5)===false) {
 			$this->exception('Error checksum_store: '.$path.$filename.'.md5');
 		}
+	}
+	public function replace_post($id,$FILES,$field = [],$callback = null){
+		if($FILES['error']!==UPLOAD_ERR_OK) $this->exception('Upload error');
+		if($callback) $callback($FILES['tmp_name']);
+		$checksum = md5_file($FILES['tmp_name']);
+		foreach($field as &$value) {
+			if(isset($value['auto'])) {
+				if($value['auto']===self::NAME) {
+					$value['value'] = $FILES['name'];
+				}
+				elseif($value['auto']===self::SIZE) {
+					$value['value'] = $FILES['size'];
+				}
+				elseif($value['auto']===self::MIME) {
+					$value['value'] = $FILES['type'];
+				}
+				elseif($value['auto']===self::CHECKSUM) {
+					$value['value'] = $checksum;
+				}
+			}
+		}
+		$this->validate_id($id);
+		$this->db_replace($id,$field);
+		$path = $this->create_path($id);
+		$filename = $this->filename($id);
+		move_uploaded_file($FILES['tmp_name'],$path.$filename);
+		$this->checksum_store($path,$filename,$checksum);
+		$this->log('replace_post: '.$id.'|'.$path.$filename);
+	}
+	private function db_replace($id,$dbfield){
+		if(empty($dbfield)) return;
+		$fieldset = $this->fieldset($dbfield);
+		$sql = "UPDATE $this->table SET $fieldset WHERE `id`='$id'";
+		$this->db_query($sql);
 	}
 	public function get($id,$field = []){
 		$this->validate_id($id);
@@ -168,6 +189,17 @@ class WildFile {
 			}
 		}
 	}
+	public function evict($array,$field = []){
+		if(!is_array($array)) $array = [$array];
+		foreach($array as $id) {
+			$this->validate_id($id);
+			$path = $this->get_path($id);
+			$filename = $this->filename($id);
+			$this->file_delete($path.$filename);
+			$this->db_replace($id,$field);
+			$this->log('evict: '.$id.'|'.$path.$filename);
+		}
+	}
 	public function zip(){
 		return new WildFileZip($this);
 	}
@@ -177,6 +209,20 @@ class WildFile {
 			$this->exception('SQL Error: '.$this->dbconn->error);
 		}
 		return $query;
+	}
+	private function fieldset($dbfield){
+		$fieldset = [];
+		foreach($dbfield as $key => $var) {
+			$field = '`'.$this->dbconn->real_escape_string($key).'`=';
+			if(isset($var['noescape']) && $var['noescape']===true) {
+				$field .= $var['value'];
+			}
+			else {
+				$field .= "'".$this->dbconn->real_escape_string($var['value'])."'";
+			}
+			$fieldset[] = $field;
+		}
+		return implode(',',$fieldset);
 	}
 	private function get_path($id){
 		$storage = $this->storage.DIRECTORY_SEPARATOR;

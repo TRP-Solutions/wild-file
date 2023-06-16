@@ -6,12 +6,8 @@ https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 require_once('include.php');
 
 $wf = new WildFile($mysqli,STORAGE,'files','thumbnail');
+$file = $wf->get($_GET['thumbnail_id']);
 
-$fields = [];
-$fields['thumbnail'] = ['value'=>'NULL','noescape'=>true];
-$wf->evict($_GET['file_id'],$fields);
+header('Content-Type: image/svg+xml');
 
-$wf = new WildFile($mysqli,STORAGE,'files');
-$wf->delete($_GET['file_id']);
-
-header('location: .');
+$file->output();

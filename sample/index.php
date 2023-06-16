@@ -11,8 +11,9 @@ $html->el('head')->el('title')->te('wild-file :: sample');
 $body = $html->el('center')->el('body');
 
 $body->el('h2')->te('wild-file :: filelist');
+$missing_thumbnail = [];
 
-$sql = "SELECT `id`,`name`,`created`,`address`
+$sql = "SELECT `id`,`name`,`created`,`address`,IF(`thumbnail` IS NULL,0,1) as thumbnail
 	FROM `files` ORDER BY `name`,`id`";
 $query = $mysqli->query($sql);
 if($mysqli->errno) {
@@ -22,6 +23,7 @@ elseif($query->num_rows) {
 	$form = $body->el('form',['action'=>'zip.php','method'=>'post']);
 	$table = $form->el('table');
 	$tr = $table->el('tr');
+	$tr->el('th');
 	$tr->el('th');
 	$tr->el('th')->te('id');
 	$tr->el('th')->te('name');
@@ -33,6 +35,13 @@ elseif($query->num_rows) {
 		$tr = $table->el('tr');
 		$tr->el('td')->el('input',['type'=>'checkbox','name'=>'zip[]','value'=>$rs->id]);
 		$tr->el('td')->te('#'.$rs->id);
+		if($rs->thumbnail) {
+			$tr->el('td')->el('img',['src'=>'icon.php?thumbnail_id='.$rs->id,'height'=>'25px']);
+		}
+		else {
+			$tr->el('td');
+			$missing_thumbnail[] = $rs->id;
+		}
 		$tr->el('td')->te($rs->name);
 		$tr->el('td')->te($rs->address);
 		$tr->el('td')->te($rs->created);
@@ -55,11 +64,23 @@ $form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','mul
 $form->el('br');
 $form->el('input',['type'=>'submit','value'=>'Upload']);
 
+if($missing_thumbnail) {
+	$body->el('h2')->te('wild-file :: thumbnail');
+	$form = $body->el('form',['action'=>'thumbnail.php','method'=>'post','enctype'=>'multipart/form-data']);
+	$form->el('label',['for'=>'thumbnail_id'])->te('Select file id:');
+	$select = $form->el('select',['name'=>'thumbnail_id','id'=>'thumbnail_id','required']);
+	foreach($missing_thumbnail as $id) $select->el('option',['value'=>$id])->te($id);
+	$form->el('br');
+	$form->el('label',['for'=>'thumbnail'])->te('Select svg:');
+	$form->el('input',['type'=>'file','name'=>'thumbnail','id'=>'thumbnail','required','accept'=>'image/svg+xml']);
+	$form->el('br');
+	$form->el('input',['type'=>'submit','value'=>'Upload']);
+}
+
 $body->el('h2')->te('wild-file :: import');
 $onclick = "location.href='import.php?type=server'";
 $body->el('button',['onclick'=>$onclick,'type'=>'button'])->te('$_SERVER');
 $onclick = "location.href='import.php?type=phpversion'";
 $body->el('button',['onclick'=>$onclick,'type'=>'button'])->te('phpversion()');
-
 
 echo $doc;
