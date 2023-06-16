@@ -229,6 +229,7 @@ class WildFile {
 
 class WildFileOut {
 	protected $file;
+	protected $property = [];
 	public function __construct($file){
 		$this->file = $file;
 	}
@@ -241,6 +242,12 @@ class WildFileOut {
 	public function get_path(){
 		return $this->file;
 	}
+  public function __set(string $name, mixed $value): void {
+		$this->property[$name] = $value;
+  }
+  public function __get(string $name): mixed {
+		return $this->property[$name];
+  }
 }
 
 class WildFileZip extends WildFileOut {
