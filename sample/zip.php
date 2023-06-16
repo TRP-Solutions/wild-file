@@ -5,6 +5,11 @@ https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 */
 require_once('include.php');
 
+if(empty($_POST['zip'])) {
+	echo 'No files selected!';
+	exit;
+}
+
 $wf = new WildFile($mysqli,STORAGE,'files');
 
 $zip = $wf->zip();
