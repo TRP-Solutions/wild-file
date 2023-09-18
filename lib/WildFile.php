@@ -288,12 +288,12 @@ class WildFileOut {
 	public function get_path(){
 		return $this->file;
 	}
-  public function __set(string $name, mixed $value): void {
+	public function __set(string $name, string $value): void {
 		$this->property[$name] = $value;
-  }
-  public function __get(string $name): mixed {
+	}
+	public function __get(string $name): string {
 		return $this->property[$name];
-  }
+	}
 }
 
 class WildFileZip extends WildFileOut {
