@@ -27,4 +27,4 @@ $fields['created'] = ['value'=>'NOW()','noescape'=>true];
 
 $wf->store_string($string,$fields);
 
-header('location: .');
+header('Location: .');

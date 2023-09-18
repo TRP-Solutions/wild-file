@@ -12,4 +12,4 @@ $fields['thumbnail'] = ['auto'=>WildFile::NAME];
 
 $wf->replace_post($_POST['thumbnail_id'],$_FILES['thumbnail'],$fields);
 
-header('location: .');
+header('Location: .');

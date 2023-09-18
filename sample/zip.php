@@ -19,8 +19,8 @@ foreach($_POST['zip'] as $id) {
 $zip->close();
 
 header('Content-Type: application/zip');
-header('Content-length: '.$zip->size);
-header('Content-disposition: attachment; filename="wf-download.zip"');
+header('Content-Length: '.$zip->size);
+header('Content-Disposition: attachment; filename="wf-download.zip"');
 
 $zip->output();
 $zip->unlink();

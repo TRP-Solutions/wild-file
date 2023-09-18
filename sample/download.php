@@ -10,6 +10,6 @@ $wf = new WildFile($mysqli,STORAGE,'files');
 $file = $wf->get($_GET['file_id'],['mime','name']);
 
 header('Content-Type: '.$file->mime);
-header('Content-disposition: inline; filename="'.$file->name.'"');
+header('Content-Disposition: inline; filename="'.$file->name.'"');
 
 $file->output();

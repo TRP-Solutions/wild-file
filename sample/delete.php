@@ -14,4 +14,4 @@ $wf->evict($_GET['file_id'],$fields);
 $wf = new WildFile($mysqli,STORAGE,'files');
 $wf->delete($_GET['file_id']);
 
-header('location: .');
+header('Location: .');

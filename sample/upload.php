@@ -24,4 +24,4 @@ $sizecheck = function($tmp_name) {
 
 $wf->store_post($_FILES['fileupload'],$fields); // ,$sizecheck
 
-header('location: .');
+header('Location: .');
