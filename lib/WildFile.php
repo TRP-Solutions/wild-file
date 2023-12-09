@@ -9,6 +9,7 @@ class WildFile {
 	private $dir;
 	private $dbconn;
 	private $storage;
+	private $idfield = 'id';
 
 	public const NAME = 1;
 	public const SIZE = 2;
@@ -30,6 +31,9 @@ class WildFile {
 			if(strpos($value,'`')===false) $value = '`'.$value.'`';
 		}
 		$this->table = implode('.',$table);
+	}
+	public function set_idfield($idfield) {
+		$this->idfield = (string) $idfield;
 	}
 	public function store_string($string,$field = []){
 		$checksum = md5($string);
@@ -154,7 +158,7 @@ class WildFile {
 	private function db_replace($id,$dbfield){
 		if(empty($dbfield)) return;
 		$fieldset = $this->fieldset($dbfield);
-		$sql = "UPDATE $this->table SET $fieldset WHERE `id`='$id'";
+		$sql = "UPDATE $this->table SET $fieldset WHERE `$this->idfield`='$id'";
 		$this->db_query($sql);
 	}
 	public function get($id,$field = []){
@@ -173,7 +177,7 @@ class WildFile {
 			$field[] = '`'.$this->dbconn->real_escape_string($var).'`';
 		}
 		$field = implode(',',$field);
-		$sql = "SELECT $field FROM $this->table WHERE `id`='$id'";
+		$sql = "SELECT $field FROM $this->table WHERE `$this->idfield`='$id'";
 		$query = $this->db_query($sql);
 		if($rs = $query->fetch_assoc()) {
 			foreach($rs as $key => $value) {
@@ -193,7 +197,7 @@ class WildFile {
 		}
 	}
 	private function db_delete($id){
-		$sql = "DELETE FROM $this->table WHERE `id`='$id'";
+		$sql = "DELETE FROM $this->table WHERE `$this->idfield`='$id'";
 		$this->db_query($sql);
 	}
 	private function file_delete($file){
@@ -269,7 +273,7 @@ class WildFile {
 		return $id.'.bin';
 	}
 	private function validate_id($id){
-		if(empty($id) || !is_numeric($id)) {
+		if(empty($id)) {
 			$this->exception('Invalid fileid');
 		}
 	}
