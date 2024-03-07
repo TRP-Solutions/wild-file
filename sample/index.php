@@ -8,7 +8,7 @@ require_once('include.php');
 $doc = new HealDocument();
 $html = $doc->el('html');
 $html->el('head')->el('title')->te('wild-file :: sample');
-$body = $html->el('center')->el('body');
+$body = $html->el('body')->el('center');
 
 $body->el('h2')->te('wild-file :: filelist');
 $missing_thumbnail = [];
