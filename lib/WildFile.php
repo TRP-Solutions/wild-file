@@ -9,6 +9,7 @@ class WildFile {
 	private $dir;
 	private $dbconn;
 	private $storage;
+	private $idfield = 'id';
 
 	public const NAME = 1;
 	public const SIZE = 2;
@@ -31,15 +32,15 @@ class WildFile {
 		}
 		$this->table = implode('.',$table);
 	}
+	public function set_idfield($idfield) {
+		$this->idfield = (string) $idfield;
+	}
 	public function store_string($string,$field = []){
 		$checksum = md5($string);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::SIZE) {
 					$value['value'] = strlen($string);
-				}
-				elseif($value['auto']===self::MIME) {
-					$value['value'] = $FILES['type'][$key];
 				}
 				elseif($value['auto']===self::CHECKSUM) {
 					$value['value'] = $checksum;
@@ -104,6 +105,28 @@ class WildFile {
 			$this->exception('Error checksum_store: '.$path.$filename.'.md5');
 		}
 	}
+	public function replace_string($id,$string,$field = []){
+		$checksum = md5($string);
+		foreach($field as &$value) {
+			if(isset($value['auto'])) {
+				if($value['auto']===self::SIZE) {
+					$value['value'] = strlen($string);
+				}
+				elseif($value['auto']===self::CHECKSUM) {
+					$value['value'] = $checksum;
+				}
+			}
+		}
+		$this->validate_id($id);
+		$this->db_replace($id,$field);
+		$path = $this->create_path($id);
+		$filename = $this->filename($id);
+		if(file_put_contents($path.$filename,$string)===false) {
+			$this->exception('Error store_string: '.$path);
+		}
+		$this->checksum_store($path,$filename,$checksum);
+		$this->log('replace_string: '.$id.'|'.$path.$filename);
+	}
 	public function replace_post($id,$FILES,$field = [],$callback = null){
 		if($FILES['error']!==UPLOAD_ERR_OK) $this->exception('Upload error');
 		if($callback) $callback($FILES['tmp_name']);
@@ -135,7 +158,7 @@ class WildFile {
 	private function db_replace($id,$dbfield){
 		if(empty($dbfield)) return;
 		$fieldset = $this->fieldset($dbfield);
-		$sql = "UPDATE $this->table SET $fieldset WHERE `id`='$id'";
+		$sql = "UPDATE $this->table SET $fieldset WHERE `$this->idfield`='$id'";
 		$this->db_query($sql);
 	}
 	public function get($id,$field = []){
@@ -154,7 +177,7 @@ class WildFile {
 			$field[] = '`'.$this->dbconn->real_escape_string($var).'`';
 		}
 		$field = implode(',',$field);
-		$sql = "SELECT $field FROM $this->table WHERE `id`='$id'";
+		$sql = "SELECT $field FROM $this->table WHERE `$this->idfield`='$id'";
 		$query = $this->db_query($sql);
 		if($rs = $query->fetch_assoc()) {
 			foreach($rs as $key => $value) {
@@ -174,7 +197,7 @@ class WildFile {
 		}
 	}
 	private function db_delete($id){
-		$sql = "DELETE FROM $this->table WHERE `id`='$id'";
+		$sql = "DELETE FROM $this->table WHERE `$this->idfield`='$id'";
 		$this->db_query($sql);
 	}
 	private function file_delete($file){
@@ -250,7 +273,7 @@ class WildFile {
 		return $id.'.bin';
 	}
 	private function validate_id($id){
-		if(empty($id) || !is_numeric($id)) {
+		if(empty($id)) {
 			$this->exception('Invalid fileid');
 		}
 	}

@@ -13,7 +13,7 @@ $body = $html->el('body')->el('center');
 $body->el('h2')->te('wild-file :: filelist');
 $missing_thumbnail = [];
 
-$sql = "SELECT `id`,`name`,`created`,`address`,IF(`thumbnail` IS NULL,0,1) as thumbnail
+$sql = "SELECT `id`,`name`,`created`,`address`,`thumbnail`
 	FROM `files` ORDER BY `name`,`id`";
 $query = $mysqli->query($sql);
 if($mysqli->errno) {
@@ -24,8 +24,8 @@ elseif($query->num_rows) {
 	$table = $form->el('table');
 	$tr = $table->el('tr');
 	$tr->el('th');
-	$tr->el('th');
 	$tr->el('th')->te('id');
+	$tr->el('th');
 	$tr->el('th')->te('name');
 	$tr->el('th')->te('address');
 	$tr->el('th')->te('created');
@@ -36,7 +36,7 @@ elseif($query->num_rows) {
 		$tr->el('td')->el('input',['type'=>'checkbox','name'=>'zip[]','value'=>$rs->id]);
 		$tr->el('td')->te('#'.$rs->id);
 		if($rs->thumbnail) {
-			$tr->el('td')->el('img',['src'=>'icon.php?thumbnail_id='.$rs->id,'height'=>'25px']);
+			$tr->el('td')->el('img',['src'=>'icon.php?thumbnail_id='.$rs->id,'height'=>'25px','title'=>$rs->thumbnail]);
 		}
 		else {
 			$tr->el('td');
