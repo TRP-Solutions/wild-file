@@ -36,7 +36,7 @@ class WildFile {
 		$this->idfield = (string) $idfield;
 	}
 	public function store_string($string,$field = []){
-		$checksum = md5($string);
+		$checksum = hash('sha256',$string);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::SIZE) {
@@ -58,7 +58,7 @@ class WildFile {
 		$this->log('store_string: '.$id.'|'.$path.$filename);
 	}
 	public function store_post($FILES,$field = [],$callback = null){
-		if(!is_array($FILES['tmp_name'])) {
+		if(!isset($FILES['tmp_name']) || !is_array($FILES['tmp_name'])) {
 			$this->exception('Invalid post array');
 		}
 		if(empty($FILES['tmp_name'][0])) {
@@ -67,7 +67,7 @@ class WildFile {
 		foreach($FILES['error'] as $key => $error) {
 			if($callback) $callback($FILES['tmp_name'][$key]);
 			if($error!==UPLOAD_ERR_OK) continue;
-			$checksum = md5_file($FILES['tmp_name'][$key]);
+			$checksum = hash_file('sha256',$FILES['tmp_name'][$key]);
 			foreach($field as &$value) {
 				if(isset($value['auto'])) {
 					if($value['auto']===self::NAME) {
@@ -100,13 +100,13 @@ class WildFile {
 		return $this->dbconn->insert_id;
 	}
 	private function checksum_store($path,$filename,$checksum){
-		$md5 = $checksum."\t".$filename.PHP_EOL;
-		if(file_put_contents($path.$filename.'.md5', $md5)===false) {
-			$this->exception('Error checksum_store: '.$path.$filename.'.md5');
+		$content = 'SHA256 ('.$filename.') = '.$checksum.PHP_EOL;
+		if(file_put_contents($path.$filename.'.sha256', $content)===false) {
+			$this->exception('Error checksum_store: '.$path.$filename.'.sha256');
 		}
 	}
 	public function replace_string($id,$string,$field = []){
-		$checksum = md5($string);
+		$checksum = hash('sha256',$string);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::SIZE) {
@@ -130,7 +130,7 @@ class WildFile {
 	public function replace_post($id,$FILES,$field = [],$callback = null){
 		if($FILES['error']!==UPLOAD_ERR_OK) $this->exception('Upload error');
 		if($callback) $callback($FILES['tmp_name']);
-		$checksum = md5_file($FILES['tmp_name']);
+		$checksum = hash_file('sha256',$FILES['tmp_name']);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::NAME) {
@@ -202,9 +202,9 @@ class WildFile {
 	}
 	private function file_delete($file){
 		if(file_exists($file)){
-			if(file_exists($file.'.md5')){
-				if(!unlink($file.'.md5')) {
-					$this->exception('Error unlink checksum: '.$file.'.md5');
+			if(file_exists($file.'.sha256')){
+				if(!unlink($file.'.sha256')) {
+					$this->exception('Error unlink checksum: '.$file.'.sha256');
 				}
 			}
 			if(!unlink($file)) {
