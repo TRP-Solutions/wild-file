@@ -10,6 +10,7 @@ class WildFile {
 	private $dbconn;
 	private $storage;
 	private $idfield = 'id';
+	private $callback = [];
 
 	public const NAME = 1;
 	public const SIZE = 2;
@@ -35,6 +36,14 @@ class WildFile {
 	public function set_idfield($idfield) {
 		$this->idfield = (string) $idfield;
 	}
+	public function set_callback($type,$function = null) {
+		if($function) {
+			$this->callback[$type] = $function;
+		}
+		else {
+			unset($this->callback[$type]);
+		}
+	}
 	public function store_string($string,$field = []){
 		$checksum = hash('sha256',$string);
 		foreach($field as &$value) {
@@ -57,7 +66,7 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('store_string: '.$id.'|'.$path.$filename);
 	}
-	public function store_post($FILES,$field = [],$callback = null){
+	public function store_post($FILES,$field = []){
 		if(!isset($FILES['tmp_name']) || !is_array($FILES['tmp_name'])) {
 			$this->exception('Invalid post array');
 		}
@@ -65,7 +74,7 @@ class WildFile {
 			$this->exception('No files uploaded');
 		}
 		foreach($FILES['error'] as $key => $error) {
-			if($callback) $callback($FILES['tmp_name'][$key]);
+			$this->callback_execute('store',$FILES['tmp_name'][$key]);
 			if($error!==UPLOAD_ERR_OK) continue;
 			$checksum = hash_file('sha256',$FILES['tmp_name'][$key]);
 			foreach($field as &$value) {
@@ -127,9 +136,9 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('replace_string: '.$id.'|'.$path.$filename);
 	}
-	public function replace_post($id,$FILES,$field = [],$callback = null){
+	public function replace_post($id,$FILES,$field = []){
 		if($FILES['error']!==UPLOAD_ERR_OK) $this->exception('Upload error');
-		if($callback) $callback($FILES['tmp_name']);
+		$this->callback_execute('store',$FILES['tmp_name']);
 		$checksum = hash_file('sha256',$FILES['tmp_name']);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
@@ -286,6 +295,11 @@ class WildFile {
 			$str = substr($str, 0, -2);
 		}
 		return implode(DIRECTORY_SEPARATOR, $parts).DIRECTORY_SEPARATOR;
+	}
+	private function callback_execute($type,$param) {
+		if(!empty($this->callback[$type])) {
+			$this->callback[$type]($param);
+		}
 	}
 	protected function exception($message){
 		$this->log($message,LOG_ERR);

@@ -22,6 +22,7 @@ $sizecheck = function($tmp_name) {
 	}
 };
 
-$wf->store_post($_FILES['fileupload'],$fields); // ,$sizecheck
+//$wf->set_callback('store',$sizecheck);
+$wf->store_post($_FILES['fileupload'],$fields);
 
 header('Location: .');
