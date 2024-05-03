@@ -9,3 +9,5 @@ CREATE TABLE `files` (
 	`thumbnail` varchar(100) DEFAULT NULL,
 	PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+GRANT DELETE, INSERT, SELECT, UPDATE ON `wildfile`.* TO `wildfile`@`localhost`;
