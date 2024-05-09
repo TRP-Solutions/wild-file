@@ -23,6 +23,6 @@ $sizecheck = function($tmp_name) {
 };
 
 //$wf->set_callback('store',$sizecheck);
-$wf->store_post($_FILES['fileupload'],$fields);
+$wf->store_post($_FILES['fileupload'],$fields,$_POST['fileupload_checksum']);
 
 header('Location: .');

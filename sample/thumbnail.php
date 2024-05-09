@@ -10,6 +10,6 @@ $wf = new WildFile($mysqli,STORAGE,'`wildfile`.`files`','thumbnail');
 $fields = [];
 $fields['thumbnail'] = ['auto'=>WildFile::NAME];
 
-$wf->replace_post($_POST['thumbnail_id'],$_FILES['thumbnail'],$fields);
+$wf->replace_post($_POST['thumbnail_id'],$_FILES['thumbnail'],$fields,$_POST['thumbnail_checksum']);
 
 header('Location: .');

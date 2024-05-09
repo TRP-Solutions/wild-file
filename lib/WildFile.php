@@ -33,10 +33,10 @@ class WildFile {
 		}
 		$this->table = implode('.',$table);
 	}
-	public function set_idfield($idfield) {
+	public function set_idfield($idfield){
 		$this->idfield = (string) $idfield;
 	}
-	public function set_callback($type,$function = null) {
+	public function set_callback($type,$function = null){
 		if($function) {
 			$this->callback[$type] = $function;
 		}
@@ -44,8 +44,9 @@ class WildFile {
 			unset($this->callback[$type]);
 		}
 	}
-	public function store_string($string,$field = []){
+	public function store_string($string,$field = [],$checksum_input = null){
 		$checksum = hash('sha256',$string);
+		if($checksum_input) $this->checksum_check($checksum,$checksum_input);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::SIZE) {
@@ -66,7 +67,7 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('store_string: '.$id.'|'.$path.$filename);
 	}
-	public function store_post($FILES,$field = []){
+	public function store_post($FILES,$field = [],$checksum_input = null){
 		if(!isset($FILES['tmp_name']) || !is_array($FILES['tmp_name'])) {
 			$this->exception('Invalid post array');
 		}
@@ -77,6 +78,7 @@ class WildFile {
 			$this->callback_execute('store',$FILES['tmp_name'][$key]);
 			if($error!==UPLOAD_ERR_OK) continue;
 			$checksum = hash_file('sha256',$FILES['tmp_name'][$key]);
+			if($checksum_input) $this->checksum_check($checksum,$checksum_input[$FILES['name'][$key]]);
 			foreach($field as &$value) {
 				if(isset($value['auto'])) {
 					if($value['auto']===self::NAME) {
@@ -114,8 +116,14 @@ class WildFile {
 			$this->exception('Error checksum_store: '.$path.$filename.'.sha256');
 		}
 	}
-	public function replace_string($id,$string,$field = []){
+	private function checksum_check($checksum,$checksum_input){
+		if($checksum!==$checksum_input) {
+			$this->exception('Error checksum_check');
+		}
+	}
+	public function replace_string($id,$string,$field = [],$checksum_input = null){
 		$checksum = hash('sha256',$string);
+		if($checksum_input) $this->checksum_check($checksum,$checksum_input);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::SIZE) {
@@ -136,10 +144,11 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('replace_string: '.$id.'|'.$path.$filename);
 	}
-	public function replace_post($id,$FILES,$field = []){
+	public function replace_post($id,$FILES,$field = [],$checksum_input = null){
 		if($FILES['error']!==UPLOAD_ERR_OK) $this->exception('Upload error');
 		$this->callback_execute('store',$FILES['tmp_name']);
 		$checksum = hash_file('sha256',$FILES['tmp_name']);
+		if($checksum_input) $this->checksum_check($checksum,$checksum_input[$FILES['name']]);
 		foreach($field as &$value) {
 			if(isset($value['auto'])) {
 				if($value['auto']===self::NAME) {

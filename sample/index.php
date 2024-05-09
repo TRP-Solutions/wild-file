@@ -7,7 +7,9 @@ require_once('include.php');
 
 $doc = new HealDocument();
 $html = $doc->el('html');
-$html->el('head')->el('title')->te('wild-file :: sample');
+$head = $html->el('head');
+$head->el('title')->te('wild-file :: sample');
+$head->el('script',['src'=>'../lib/WildFile.js']);
 $body = $html->el('body')->el('center');
 
 $body->el('h2')->te('wild-file :: filelist');
@@ -60,7 +62,7 @@ else {
 $body->el('h2')->te('wild-file :: upload');
 $form = $body->el('form',['action'=>'upload.php','method'=>'post','enctype'=>'multipart/form-data']);
 $form->el('label',['for'=>'fileupload'])->te('Select file:');
-$form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required']);
+$form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.checksum(this);']);
 $form->el('br');
 $form->el('input',['type'=>'submit','value'=>'Upload']);
 
@@ -72,7 +74,7 @@ if($missing_thumbnail) {
 	foreach($missing_thumbnail as $id) $select->el('option',['value'=>$id])->te($id);
 	$form->el('br');
 	$form->el('label',['for'=>'thumbnail'])->te('Select svg:');
-	$form->el('input',['type'=>'file','name'=>'thumbnail','id'=>'thumbnail','required','accept'=>'image/svg+xml']);
+	$form->el('input',['type'=>'file','name'=>'thumbnail','id'=>'thumbnail','required','accept'=>'image/svg+xml','onchange'=>'WildFile.checksum(this);']);
 	$form->el('br');
 	$form->el('input',['type'=>'submit','value'=>'Upload']);
 }
