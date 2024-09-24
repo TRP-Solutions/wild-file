@@ -369,7 +369,7 @@ class WildFileZip extends WildFileOut {
 		if(!$result) {
 			throw new \Exception('Error close ZipArchive');
 		}
-		$this->size = filesize($this->file);
+		$this->size = (string) filesize($this->file);
 	}
 	public function unlink(){
 		$this->archive = null;
