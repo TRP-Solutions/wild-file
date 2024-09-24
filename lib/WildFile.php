@@ -3,6 +3,7 @@
 SimpleAuth is licensed under the Apache License 2.0 license
 https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 */
+declare(strict_types=1);
 
 class WildFile {
 	private $table;
@@ -254,12 +255,12 @@ class WildFile {
 	private function fieldset($dbfield){
 		$fieldset = [];
 		foreach($dbfield as $key => $var) {
-			$field = '`'.$this->dbconn->real_escape_string($key).'`=';
+			$field = '`'.$this->dbconn->real_escape_string((string) $key).'`=';
 			if(isset($var['noescape']) && $var['noescape']===true) {
 				$field .= $var['value'];
 			}
 			else {
-				$field .= "'".$this->dbconn->real_escape_string($var['value'])."'";
+				$field .= "'".$this->dbconn->real_escape_string((string) $var['value'])."'";
 			}
 			$fieldset[] = $field;
 		}
