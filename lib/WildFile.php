@@ -343,6 +343,26 @@ class WildFileOut {
 	}
 }
 
+class WildFileHeader {
+	public static function type($str){
+		header('Content-Type: '.$str);
+	}
+	public static function filename($filename,$download = false){
+		$download = $download ? 'attachment' : 'inline';
+		header("Content-Disposition: ".$download."; filename*=UTF-8''".rawurlencode($filename));
+	}
+	public static function expires($datetime = null) {
+		if(!$datetime) {
+			$datetime = new DateTime('1 month');
+		}
+		$datetime->setTimezone(new DateTimeZone('UTC'));
+		$seconds = (new DateTime())->diff($datetime)->format('%a') * 86400;
+		header('Expires: '.$datetime->format('D, d M Y H:i:s \G\M\T'));
+		header('Cache-Control: max-age='.$seconds);
+		header_remove('Pragma');
+	}
+}
+
 class WildFileZip extends WildFileOut {
 	private $wf;
 	private $archive;

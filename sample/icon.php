@@ -9,6 +9,7 @@ require_once('include.php');
 $wf = new WildFile($mysqli,STORAGE,'files','thumbnail');
 $file = $wf->get($_GET['thumbnail_id']);
 
-header('Content-Type: image/svg+xml');
+WildFileHeader::type('image/svg+xml');
+WildFileHeader::expires();
 
 $file->output();
