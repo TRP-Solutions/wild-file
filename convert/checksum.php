@@ -1,4 +1,8 @@
 <?php
+/*
+WildFile is licensed under the Apache License 2.0 license
+https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
+*/
 require_once __DIR__.'/../lib/WildFile.php';
 
 $mysqli = new mysqli('localhost','wildfile','Pa55w0rd','wildfile');
