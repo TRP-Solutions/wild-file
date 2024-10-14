@@ -10,6 +10,23 @@ $doc = new HealDocument();
 $html = $doc->el('html');
 $head = $html->el('head');
 $head->el('title')->te('wild-file :: sample');
+$head->el('script')->te(<<<JS
+	function upload_init(input, file){
+		file.progressElement = document.createElement('progress');
+		let p = document.createElement('p');
+		p.appendChild(file.progressElement);
+		p.appendChild(document.createTextNode(file.name));
+		input.parentElement.appendChild(p);
+	}
+	function upload_progress(input, file, value, max){
+		file.progressElement.value = value;
+		file.progressElement.max = max;
+	}
+	function upload_complete(input, file){
+		const parent = file.progressElement.parentElement;
+		parent.replaceChild(document.createTextNode("\u2705 "), file.progressElement);
+	}
+	JS);
 $head->el('script',['src'=>'../lib/WildFile.js']);
 $body = $html->el('body')->el('center');
 
@@ -62,6 +79,13 @@ else {
 
 $body->el('h2')->te('wild-file :: upload');
 $form = $body->el('form',['action'=>'upload.php','method'=>'post','enctype'=>'multipart/form-data']);
+$form->el('label',['for'=>'fileupload'])->te('Select file:');
+$form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.checksum(this);']);
+$form->el('br');
+$form->el('input',['type'=>'submit','value'=>'Upload']);
+
+$body->el('h2')->te('wild-file :: chunked upload');
+$form = $body->el('form',['onsubmit'=>"WildFile.upload(event, this,'upload_chunked.php',upload_init,upload_progress,upload_complete);"]);
 $form->el('label',['for'=>'fileupload'])->te('Select file:');
 $form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.checksum(this);']);
 $form->el('br');

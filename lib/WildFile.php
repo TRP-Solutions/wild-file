@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 class WildFile {
 	private $table;
+	private $table_chunked, $chunks_subfolder = '.chunked_upload';
 	private $dir;
 	private $dbconn;
 	private $storage;
@@ -34,6 +35,20 @@ class WildFile {
 		}
 		$this->table = implode('.',$table);
 	}
+	public function set_file_chunk_table($table_chunked = null){
+		if(!isset($table_chunked)){
+			$this->table_chunked = preg_replace("/`$/", "_chunked_upload`", $this->table);
+		} else {
+			$table_chunked = explode('.',$table_chunked);
+			foreach($table_chunked as &$value) {
+				if(strpos($value,'`')===false) $value = '`'.$value.'`';
+			}
+			$this->table_chunked = implode('.',$table_chunked);
+		}
+		if($this->table == $this->table_chunked){
+			throw new \Exception("Database table for chunked upload can't be the same as file table.");
+		}
+	}
 	public function set_idfield($idfield){
 		$this->idfield = (string) $idfield;
 	}
@@ -48,16 +63,10 @@ class WildFile {
 	public function store_string($string,$field = [],$checksum_input = null){
 		$checksum = hash('sha256',$string);
 		if(func_num_args()===3) $this->checksum_check($checksum,$checksum_input);
-		foreach($field as &$value) {
-			if(isset($value['auto'])) {
-				if($value['auto']===self::SIZE) {
-					$value['value'] = strlen($string);
-				}
-				elseif($value['auto']===self::CHECKSUM) {
-					$value['value'] = $checksum;
-				}
-			}
-		}
+		$this->auto_value($field, [
+			self::SIZE => strlen($string),
+			self::CHECKSUM => $checksum
+		]);
 		$id = $this->db_store($field);
 		$this->validate_id($id);
 		$path = $this->create_path($id);
@@ -80,22 +89,12 @@ class WildFile {
 			if($error!==UPLOAD_ERR_OK) continue;
 			$checksum = hash_file('sha256',$FILES['tmp_name'][$key]);
 			if(func_num_args()===3) $this->checksum_check($checksum,$checksum_input[$FILES['name'][$key]]);
-			foreach($field as &$value) {
-				if(isset($value['auto'])) {
-					if($value['auto']===self::NAME) {
-						$value['value'] = $FILES['name'][$key];
-					}
-					elseif($value['auto']===self::SIZE) {
-						$value['value'] = $FILES['size'][$key];
-					}
-					elseif($value['auto']===self::MIME) {
-						$value['value'] = $FILES['type'][$key];
-					}
-					elseif($value['auto']===self::CHECKSUM) {
-						$value['value'] = $checksum;
-					}
-				}
-			}
+			$this->auto_value($field, [
+				self::NAME => $FILES['name'][$key],
+				self::SIZE => $FILES['size'][$key],
+				self::MIME => $FILES['type'][$key],
+				self::CHECKSUM => $checksum
+			]);
 			$id = $this->db_store($field);
 			$this->validate_id($id);
 			$path = $this->create_path($id);
@@ -105,9 +104,122 @@ class WildFile {
 			$this->log('store_post: '.$id.'|'.$path.$filename);
 		}
 	}
+	public function store_chunk_input($field = []){
+		$checksum_input = $_SERVER['HTTP_X_WILDFILE_CHECKSUM'] ?? null;
+		$transfer_id = $_SERVER['HTTP_X_WILDFILE_TRANSFER'] ?? null;
+		if($transfer_id) $transfer_id = intval($transfer_id);
+		$range_match = preg_match("/^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/",$_SERVER['HTTP_CONTENT_RANGE'],$range_values);
+		if($range_match !== 1){
+			$this->exception("Invalid Content-Range header");
+		}
+		$disposition_match = preg_match("/^attachment; filename=\"([^\"]+)\"$/",$_SERVER['HTTP_CONTENT_DISPOSITION'],$disposition_values);
+		if($disposition_match !== 1){
+			$this->exception("Invalid Content-Disposition header");
+		}
+		$this->auto_value($field, [
+			self::NAME => $disposition_values[1],
+			self::SIZE => $range_values[3],
+			self::MIME => $_SERVER['CONTENT_TYPE'],
+		]);
+		$chunk = file_get_contents('php://input');
+		$range_start = intval($range_values[1]);
+		$range_end = intval($range_values[2]);
+		$file_size = intval($range_values[3]);
+		return $this->store_chunk($chunk,$range_start,$range_end,$file_size,$field,$checksum_input,$transfer_id);
+	}
+	public function store_chunk(string $chunk, int $range_start, int $range_end, int $size_input, array $field, string $checksum_input, ?int $transfer_id = null){
+		$chunk_size = strlen($chunk);
+		if($chunk_size == 0 || $range_start + $chunk_size - 1 != $range_end){
+			$this->exception("Invalid file chunk size ($chunk_size bytes, $range_start to $range_end)");
+		}
+
+		if(!isset($this->table_chunked)){
+			$this->set_file_chunk_table();
+		}
+
+		if(!isset($transfer_id)){
+			$transfer_id = $this->db_store_transfer($field, $checksum_input);
+			$this->validate_id($transfer_id);
+		} else {
+			$this->validate_transfer_id($transfer_id, $field);
+		}
+		$path_chunks = $this->get_path_chunks();
+		$filename_chunks = $this->filename($transfer_id);
+		$file_uri = $path_chunks.$filename_chunks;
+		/*
+		Open with mode 'c' (writing only, allows seeking)
+		then seek to chunk offset before writing,
+		so we aren't limited to sequential chunks
+		*/
+		$fail_if = fn($name,$failure_value,$value) => $value === $failure_value ? $this->exception('Error store_chunk: '.$path_chunks." ($name)") : $value;
+		
+		$file = $fail_if('fopen', false, fopen($file_uri, 'c'));
+		$fail_if('fseek', -1, fseek($file, $range_start));
+		$fail_if('fwrite', false, fwrite($file, $chunk));
+		$fail_if('fclose', false, fclose($file));
+
+		$this->log('store_chunk: '.$transfer_id."($range_start-$range_end/$size_input)|".$path_chunks);
+
+		$file_size = filesize($file_uri);
+		if($file_size < $size_input){
+			return ['status'=>'incomplete', 'transfer_id'=>$transfer_id];
+		} elseif($file_size > $size_input){
+			$this->exception("Error store_chunked_upload: $file_uri (file size doesn't match expected size)");
+		}
+
+		$checksum = hash_file('sha256',$file_uri);
+		$this->checksum_check($checksum,$checksum_input);
+
+		$this->auto_value($field, [
+			self::SIZE => $file_size,
+			self::CHECKSUM => $checksum
+		]);
+
+		$id = $this->db_store($field);
+		$this->validate_id($id);
+		$path = $this->create_path($id);
+		$filename = $this->filename($id);
+		if(rename($file_uri, $path.$filename)===false) {
+			$this->exception('Error store_chunked_upload: '.$path);
+		}
+		$this->checksum_store($path,$filename,$checksum);
+		$this->log('store_chunked_upload: '.$transfer_id.'->'.$id.'|'.$path.$filename);
+
+		return ['status'=>'complete', 'transfer_id'=>$transfer_id, 'file_id'=>$id];
+	}
+	private function validate_transfer_id(int $id, array $field) {
+		$sql = "SELECT * FROM $this->table_chunked WHERE id=$id";
+		$query = $this->db_query($sql);
+		if($query->num_rows != 1){
+			$this->exception('Invalid transferid');
+		}
+		$transfer = $query->fetch_assoc();
+		foreach($field as $key => $value){
+			if(!isset($value['value']) || ($value['noescape'] ?? false) && str_ends_with($value['value'],'()')){
+				continue;
+			}
+			if($value['value'] != $transfer[$key]){
+				$this->exception("File chunk metadata does not match ongoing transfer: $value[value] != {$transfer[$key]}");
+			}
+		}
+	}
+	private function auto_value(&$field, $auto){
+		foreach($field as &$value) {
+			if(isset($value['auto']) && isset($auto[$value['auto']])) {
+				$value['value'] = $auto[$value['auto']];
+			}
+		}
+	}
 	private function db_store($dbfield){
 		$fieldset = $this->fieldset($dbfield);
 		$sql = "INSERT INTO $this->table SET $fieldset";
+		$this->db_query($sql);
+		return $this->dbconn->insert_id;
+	}
+	private function db_store_transfer($field, $checksum_input){
+		$field['checksum'] = ['value'=>$checksum_input];
+		$fieldset = $this->fieldset($field);
+		$sql = "INSERT INTO $this->table_chunked SET $fieldset";
 		$this->db_query($sql);
 		return $this->dbconn->insert_id;
 	}
@@ -125,16 +237,10 @@ class WildFile {
 	public function replace_string($id,$string,$field = [],$checksum_input = null){
 		$checksum = hash('sha256',$string);
 		if(func_num_args()===4) $this->checksum_check($checksum,$checksum_input);
-		foreach($field as &$value) {
-			if(isset($value['auto'])) {
-				if($value['auto']===self::SIZE) {
-					$value['value'] = strlen($string);
-				}
-				elseif($value['auto']===self::CHECKSUM) {
-					$value['value'] = $checksum;
-				}
-			}
-		}
+		$this->auto_value($field, [
+			self::SIZE => strlen($string),
+			self::CHECKSUM => $checksum,
+		]);
 		$this->validate_id($id);
 		$this->db_replace($id,$field);
 		$path = $this->create_path($id);
@@ -150,22 +256,12 @@ class WildFile {
 		$this->callback_execute('store',$FILES['tmp_name']);
 		$checksum = hash_file('sha256',$FILES['tmp_name']);
 		if(func_num_args()===4) $this->checksum_check($checksum,$checksum_input[$FILES['name']]);
-		foreach($field as &$value) {
-			if(isset($value['auto'])) {
-				if($value['auto']===self::NAME) {
-					$value['value'] = $FILES['name'];
-				}
-				elseif($value['auto']===self::SIZE) {
-					$value['value'] = $FILES['size'];
-				}
-				elseif($value['auto']===self::MIME) {
-					$value['value'] = $FILES['type'];
-				}
-				elseif($value['auto']===self::CHECKSUM) {
-					$value['value'] = $checksum;
-				}
-			}
-		}
+		$this->auto_value($field, [
+			self::NAME => $FILES['name'][$key],
+			self::SIZE => $FILES['size'][$key],
+			self::MIME => $FILES['type'][$key],
+			self::CHECKSUM => $checksum
+		]);
 		$this->validate_id($id);
 		$this->db_replace($id,$field);
 		$path = $this->create_path($id);
@@ -287,6 +383,15 @@ class WildFile {
 			}
 		}
 		return $storage.$folder;
+	}
+	private function get_path_chunks(){
+		$path = $this->storage.DIRECTORY_SEPARATOR.$this->dir.DIRECTORY_SEPARATOR.$this->chunks_subfolder.DIRECTORY_SEPARATOR;
+		if(!is_dir($path)){
+			if(!mkdir($path)) {
+				$this->exception('Error mkdir: '.$path);
+			}
+		}
+		return $path;
 	}
 	private function filename($id){
 		return $id.'.bin';
