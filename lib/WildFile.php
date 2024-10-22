@@ -11,13 +11,15 @@ class WildFile {
 	private $dir;
 	private $dbconn;
 	private $storage;
-	private $idfield = 'id';
+	private string $idfield = 'id';
+	private string $idfield_chunked = 'id';
 	private $callback = [];
 
 	public const NAME = 1;
 	public const SIZE = 2;
 	public const MIME = 3;
 	public const CHECKSUM = 4;
+	public const TRANSFER_TOKEN = 5;
 
 	public function __construct($dbconn,$storage,$table,$dir = null){
 		if(!is_int($dbconn->thread_id)) {
@@ -49,8 +51,9 @@ class WildFile {
 			throw new \Exception("Database table for chunked upload can't be the same as file table.");
 		}
 	}
-	public function set_idfield($idfield){
-		$this->idfield = (string) $idfield;
+	public function set_idfield(string $idfield, ?string $idfield_chunked = null){
+		$this->idfield = $idfield;
+		$this->idfield_chunked = $idfield_chunked ?? $idfield;
 	}
 	public function set_callback($type,$function = null){
 		if($function) {
@@ -104,10 +107,7 @@ class WildFile {
 			$this->log('store_post: '.$id.'|'.$path.$filename);
 		}
 	}
-	public function store_chunk_input($field = []){
-		$checksum_input = $_SERVER['HTTP_X_WILDFILE_CHECKSUM'] ?? null;
-		$transfer_id = $_SERVER['HTTP_X_WILDFILE_TRANSFER'] ?? null;
-		if($transfer_id) $transfer_id = intval($transfer_id);
+	public function read_chunk_input_headers(){
 		$range_match = preg_match("/^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/",$_SERVER['HTTP_CONTENT_RANGE'],$range_values);
 		if($range_match !== 1){
 			$this->exception("Invalid Content-Range header");
@@ -116,18 +116,29 @@ class WildFile {
 		if($disposition_match !== 1){
 			$this->exception("Invalid Content-Disposition header");
 		}
+		return [
+			'checksum' => $_SERVER['HTTP_X_WILDFILE_CHECKSUM'] ?? null,
+			'transfer' => $_SERVER['HTTP_X_WILDFILE_TRANSFER'] ?? null,
+			'mime' => $_SERVER['CONTENT_TYPE'],
+			'name' => $disposition_values[1],
+			'range_start' => intval($range_values[1]),
+			'range_end' => intval($range_values[2]),
+			'file_size' => intval($range_values[3]),
+		];
+	}
+	public function store_chunk_input($field = [], $metadata = null){
+		if(!isset($metadata)){
+			$metadata = $this->read_chunk_input_headers();
+		}
 		$this->auto_value($field, [
-			self::NAME => $disposition_values[1],
-			self::SIZE => $range_values[3],
-			self::MIME => $_SERVER['CONTENT_TYPE'],
+			self::NAME => $metadata['name'],
+			self::SIZE => $metadata['file_size'],
+			self::MIME => $metadata['mime'],
 		]);
 		$chunk = file_get_contents('php://input');
-		$range_start = intval($range_values[1]);
-		$range_end = intval($range_values[2]);
-		$file_size = intval($range_values[3]);
-		return $this->store_chunk($chunk,$range_start,$range_end,$file_size,$field,$checksum_input,$transfer_id);
+		return $this->store_chunk($chunk,$metadata['range_start'],$metadata['range_end'],$metadata['file_size'],$field,$metadata['checksum'],$metadata['transfer']);
 	}
-	public function store_chunk(string $chunk, int $range_start, int $range_end, int $size_input, array $field, string $checksum_input, ?int $transfer_id = null){
+	public function store_chunk(string $chunk, int $range_start, int $range_end, int $size_input, array $field, string $checksum_input, $transfer_token = null){
 		$chunk_size = strlen($chunk);
 		if($chunk_size == 0 || $range_start + $chunk_size - 1 != $range_end){
 			$this->exception("Invalid file chunk size ($chunk_size bytes, $range_start to $range_end)");
@@ -137,11 +148,11 @@ class WildFile {
 			$this->set_file_chunk_table();
 		}
 
-		if(!isset($transfer_id)){
-			$transfer_id = $this->db_store_transfer($field, $checksum_input);
+		if(!isset($transfer_token)){
+			[$transfer_id, $transfer_token] = $this->db_store_transfer($field, $checksum_input);
 			$this->validate_id($transfer_id);
 		} else {
-			$this->validate_transfer_id($transfer_id, $field);
+			$transfer_id = $this->validate_transfer_id($transfer_token, $field);
 		}
 		$path_chunks = $this->get_path_chunks();
 		$filename_chunks = $this->filename($transfer_id);
@@ -162,7 +173,7 @@ class WildFile {
 
 		$file_size = filesize($file_uri);
 		if($file_size < $size_input){
-			return ['status'=>'incomplete', 'transfer_id'=>$transfer_id];
+			return ['status'=>'incomplete', 'transfer'=>$transfer_token];
 		} elseif($file_size > $size_input){
 			$this->exception("Error store_chunked_upload: $file_uri (file size doesn't match expected size)");
 		}
@@ -172,7 +183,8 @@ class WildFile {
 
 		$this->auto_value($field, [
 			self::SIZE => $file_size,
-			self::CHECKSUM => $checksum
+			self::CHECKSUM => $checksum,
+			self::TRANSFER_TOKEN => $transfer_token
 		]);
 
 		$id = $this->db_store($field);
@@ -185,13 +197,16 @@ class WildFile {
 		$this->checksum_store($path,$filename,$checksum);
 		$this->log('store_chunked_upload: '.$transfer_id.'->'.$id.'|'.$path.$filename);
 
-		return ['status'=>'complete', 'transfer_id'=>$transfer_id, 'file_id'=>$id];
+		$file_id = $field[$this->idfield]['value'] ?? $id;
+		return ['status'=>'complete', 'transfer'=>$transfer_token, 'file'=>$file_id];
 	}
-	private function validate_transfer_id(int $id, array $field) {
-		$sql = "SELECT * FROM $this->table_chunked WHERE id=$id";
+	private function validate_transfer_id($transfer_token, array $field) {
+		$transfer_token = $this->dbconn->real_escape_string($transfer_token);
+		$id_field = $this->dbconn->real_escape_string($this->idfield_chunked);
+		$sql = "SELECT * FROM $this->table_chunked WHERE `$id_field`='$transfer_token'";
 		$query = $this->db_query($sql);
 		if($query->num_rows != 1){
-			$this->exception('Invalid transferid');
+			$this->exception('Invalid transfer token');
 		}
 		$transfer = $query->fetch_assoc();
 		foreach($field as $key => $value){
@@ -199,9 +214,10 @@ class WildFile {
 				continue;
 			}
 			if($value['value'] != $transfer[$key]){
-				$this->exception("File chunk metadata does not match ongoing transfer: $value[value] != {$transfer[$key]}");
+				$this->exception("File chunk metadata does not match ongoing transfer ($transfer_token)");
 			}
 		}
+		return $transfer['id'];
 	}
 	private function auto_value(&$field, $auto){
 		foreach($field as &$value) {
@@ -218,10 +234,14 @@ class WildFile {
 	}
 	private function db_store_transfer($field, $checksum_input){
 		$field['checksum'] = ['value'=>$checksum_input];
+		$generate_id = $field[$this->idfield_chunked]['generate'] ?? null;
+		if(is_callable($generate_id)){
+			$field[$this->idfield_chunked]['value'] = $generate_id();
+		}
 		$fieldset = $this->fieldset($field);
 		$sql = "INSERT INTO $this->table_chunked SET $fieldset";
 		$this->db_query($sql);
-		return $this->dbconn->insert_id;
+		return [$this->dbconn->insert_id, $field[$this->idfield_chunked]['value'] ?? $this->dbconn->insert_id];
 	}
 	private function checksum_store($path,$filename,$checksum){
 		$content = 'SHA256 ('.$filename.') = '.$checksum.PHP_EOL;
@@ -351,6 +371,7 @@ class WildFile {
 	private function fieldset($dbfield){
 		$fieldset = [];
 		foreach($dbfield as $key => $var) {
+			if(!isset($var['value'])) $this->exception('Missing value: '.json_encode([$key=>$var]));
 			$field = '`'.$this->dbconn->real_escape_string((string) $key).'`=';
 			if(isset($var['noescape']) && $var['noescape']===true) {
 				$field .= $var['value'];

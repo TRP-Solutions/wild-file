@@ -23,6 +23,7 @@ $head->el('script')->te(<<<JS
 		file.progressElement.max = max;
 	}
 	function upload_complete(input, file){
+		console.log(input,file);
 		const parent = file.progressElement.parentElement;
 		parent.replaceChild(document.createTextNode("\u2705 "), file.progressElement);
 	}
