@@ -7,19 +7,16 @@ declare(strict_types=1);
 
 class WildFile {
 	private $table;
-	private $table_chunked, $chunks_subfolder = '.chunked_upload';
 	private $dir;
 	private $dbconn;
 	private $storage;
 	private string $idfield = 'id';
-	private string $idfield_chunked = 'id';
 	private $callback = [];
 
 	public const NAME = 1;
 	public const SIZE = 2;
 	public const MIME = 3;
 	public const CHECKSUM = 4;
-	public const TRANSFER_TOKEN = 5;
 
 	public function __construct($dbconn,$storage,$table,$dir = null){
 		if(!is_int($dbconn->thread_id)) {
@@ -51,9 +48,8 @@ class WildFile {
 			throw new \Exception("Database table for chunked upload can't be the same as file table.");
 		}
 	}
-	public function set_idfield(string $idfield, ?string $idfield_chunked = null){
+	public function set_idfield(string $idfield){
 		$this->idfield = $idfield;
-		$this->idfield_chunked = $idfield_chunked ?? $idfield;
 	}
 	public function set_callback($type,$function = null){
 		if($function) {
@@ -107,117 +103,27 @@ class WildFile {
 			$this->log('store_post: '.$id.'|'.$path.$filename);
 		}
 	}
-	public function read_chunk_input_headers(){
-		$range_match = preg_match("/^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/",$_SERVER['HTTP_CONTENT_RANGE'],$range_values);
-		if($range_match !== 1){
-			$this->exception("Invalid Content-Range header");
-		}
-		$disposition_match = preg_match("/^attachment; filename=\"([^\"]+)\"$/",$_SERVER['HTTP_CONTENT_DISPOSITION'],$disposition_values);
-		if($disposition_match !== 1){
-			$this->exception("Invalid Content-Disposition header");
-		}
-		return [
-			'checksum' => $_SERVER['HTTP_X_WILDFILE_CHECKSUM'] ?? null,
-			'transfer' => $_SERVER['HTTP_X_WILDFILE_TRANSFER'] ?? null,
-			'mime' => $_SERVER['CONTENT_TYPE'],
-			'name' => $disposition_values[1],
-			'range_start' => intval($range_values[1]),
-			'range_end' => intval($range_values[2]),
-			'file_size' => intval($range_values[3]),
-		];
-	}
-	public function store_chunk_input($field = [], $metadata = null){
-		if(!isset($metadata)){
-			$metadata = $this->read_chunk_input_headers();
-		}
-		$this->auto_value($field, [
-			self::NAME => $metadata['name'],
-			self::SIZE => $metadata['file_size'],
-			self::MIME => $metadata['mime'],
-		]);
-		$chunk = file_get_contents('php://input');
-		return $this->store_chunk($chunk,$metadata['range_start'],$metadata['range_end'],$metadata['file_size'],$field,$metadata['checksum'],$metadata['transfer']);
-	}
-	public function store_chunk(string $chunk, int $range_start, int $range_end, int $size_input, array $field, string $checksum_input, $transfer_token = null){
-		$chunk_size = strlen($chunk);
-		if($chunk_size == 0 || $range_start + $chunk_size - 1 != $range_end){
-			$this->exception("Invalid file chunk size ($chunk_size bytes, $range_start to $range_end)");
-		}
+	public function store_chunked_upload(WildFileChunked $upload, $field = []){
+		if($upload->complete()){
+			$this->auto_value($field, [
+				self::SIZE => $upload->file_size,
+				self::CHECKSUM => $upload->checksum,
+				self::NAME => $upload->name,
+				self::MIME => $upload->mime,
+			]);
 
-		if(!isset($this->table_chunked)){
-			$this->set_file_chunk_table();
-		}
-
-		if(!isset($transfer_token)){
-			[$transfer_id, $transfer_token] = $this->db_store_transfer($field, $checksum_input);
-			$this->validate_id($transfer_id);
-		} else {
-			$transfer_id = $this->validate_transfer_id($transfer_token, $field);
-		}
-		$path_chunks = $this->get_path_chunks();
-		$filename_chunks = $this->filename($transfer_id);
-		$file_uri = $path_chunks.$filename_chunks;
-		/*
-		Open with mode 'c' (writing only, allows seeking)
-		then seek to chunk offset before writing,
-		so we aren't limited to sequential chunks
-		*/
-		$fail_if = fn($name,$failure_value,$value) => $value === $failure_value ? $this->exception('Error store_chunk: '.$path_chunks." ($name)") : $value;
-		
-		$file = $fail_if('fopen', false, fopen($file_uri, 'c'));
-		$fail_if('fseek', -1, fseek($file, $range_start));
-		$fail_if('fwrite', false, fwrite($file, $chunk));
-		$fail_if('fclose', false, fclose($file));
-
-		$this->log('store_chunk: '.$transfer_id."($range_start-$range_end/$size_input)|".$path_chunks);
-
-		$file_size = filesize($file_uri);
-		if($file_size < $size_input){
-			return ['status'=>'incomplete', 'transfer'=>$transfer_token];
-		} elseif($file_size > $size_input){
-			$this->exception("Error store_chunked_upload: $file_uri (file size doesn't match expected size)");
-		}
-
-		$checksum = hash_file('sha256',$file_uri);
-		$this->checksum_check($checksum,$checksum_input);
-
-		$this->auto_value($field, [
-			self::SIZE => $file_size,
-			self::CHECKSUM => $checksum,
-			self::TRANSFER_TOKEN => $transfer_token
-		]);
-
-		$id = $this->db_store($field);
-		$this->validate_id($id);
-		$path = $this->create_path($id);
-		$filename = $this->filename($id);
-		if(rename($file_uri, $path.$filename)===false) {
-			$this->exception('Error store_chunked_upload: '.$path);
-		}
-		$this->checksum_store($path,$filename,$checksum);
-		$this->log('store_chunked_upload: '.$transfer_id.'->'.$id.'|'.$path.$filename);
-
-		$file_id = $field[$this->idfield]['value'] ?? $id;
-		return ['status'=>'complete', 'transfer'=>$transfer_token, 'file'=>$file_id];
-	}
-	private function validate_transfer_id($transfer_token, array $field) {
-		$transfer_token = $this->dbconn->real_escape_string($transfer_token);
-		$id_field = $this->dbconn->real_escape_string($this->idfield_chunked);
-		$sql = "SELECT * FROM $this->table_chunked WHERE `$id_field`='$transfer_token'";
-		$query = $this->db_query($sql);
-		if($query->num_rows != 1){
-			$this->exception('Invalid transfer token');
-		}
-		$transfer = $query->fetch_assoc();
-		foreach($field as $key => $value){
-			if(!isset($value['value']) || ($value['noescape'] ?? false) && str_ends_with($value['value'],'()')){
-				continue;
+			$id = $this->db_store($field);
+			$this->validate_id($id);
+			$path = $this->create_path($id);
+			$filename = $this->filename($id);
+			if(rename($upload->file_uri, $path.$filename)===false) {
+				$this->exception('Error store_chunked_upload: '.$path);
 			}
-			if($value['value'] != $transfer[$key]){
-				$this->exception("File chunk metadata does not match ongoing transfer ($transfer_token)");
-			}
+			$this->checksum_store($path,$filename,$upload->checksum);
+			$this->log('store_chunked_upload: '.$upload->transfer_id.'->'.$id.'|'.$path.$filename);
+
+			$upload->stored_file_id = $field[$this->idfield]['value'] ?? $id;
 		}
-		return $transfer['id'];
 	}
 	private function auto_value(&$field, $auto){
 		foreach($field as &$value) {
@@ -231,17 +137,6 @@ class WildFile {
 		$sql = "INSERT INTO $this->table SET $fieldset";
 		$this->db_query($sql);
 		return $this->dbconn->insert_id;
-	}
-	private function db_store_transfer($field, $checksum_input){
-		$field['checksum'] = ['value'=>$checksum_input];
-		$generate_id = $field[$this->idfield_chunked]['generate'] ?? null;
-		if(is_callable($generate_id)){
-			$field[$this->idfield_chunked]['value'] = $generate_id();
-		}
-		$fieldset = $this->fieldset($field);
-		$sql = "INSERT INTO $this->table_chunked SET $fieldset";
-		$this->db_query($sql);
-		return [$this->dbconn->insert_id, $field[$this->idfield_chunked]['value'] ?? $this->dbconn->insert_id];
 	}
 	private function checksum_store($path,$filename,$checksum){
 		$content = 'SHA256 ('.$filename.') = '.$checksum.PHP_EOL;
@@ -520,5 +415,206 @@ class WildFileZip extends WildFileOut {
 	public function unlink(){
 		$this->archive = null;
 		unlink($this->file);
+	}
+}
+
+class WildFileChunked {
+	const STATUS_INCOMPLETE = 0;
+	const STATUS_COMPLETE = 1;
+
+	public readonly string $transfer_id;
+	public readonly string $file_uri;
+	public readonly int $file_size;
+	public readonly string $checksum;
+	public $stored_file_id;
+
+	private readonly string $progress_uri;
+	private $progress_file;
+	private int $status;
+	private int $progress;
+	private int $chunk_size;
+
+
+	public static function read_input_headers(){
+		$range_match = preg_match("/^bytes ([0-9]+)-([0-9]+)\/([0-9]+)$/",$_SERVER['HTTP_CONTENT_RANGE'],$range_values);
+		if($range_match !== 1){
+			self::exception("Invalid Content-Range header");
+		}
+		$disposition_match = preg_match("/^attachment; filename=\"([^\"]+)\"$/",$_SERVER['HTTP_CONTENT_DISPOSITION'],$disposition_values);
+		if($disposition_match !== 1){
+			self::exception("Invalid Content-Disposition header");
+		}
+		return [
+			'checksum' => $_SERVER['HTTP_X_WILDFILE_CHECKSUM'] ?? null,
+			'transfer' => $_SERVER['HTTP_X_WILDFILE_TRANSFER'] ?? null,
+			'mime' => $_SERVER['CONTENT_TYPE'],
+			'name' => $disposition_values[1],
+			'range_start' => intval($range_values[1]),
+			'range_end' => intval($range_values[2]),
+			'file_size' => intval($range_values[3]),
+		];
+	}
+	public static function from_input($storage, $dir, $metadata = null, $subfolder = null){
+		if(!isset($metadata)){
+			$metadata = self::read_input_headers();
+		}
+		$chunk = file_get_contents('php://input');
+		return new self(
+			$chunk,
+			$metadata['range_start'],
+			$metadata['range_end'],
+			$metadata['file_size'],
+			$metadata['checksum'],
+			$storage,
+			$dir,
+			$subfolder,
+			$metadata['transfer'],
+			$metadata['name'],
+			$metadata['mime']
+		);
+	}
+
+	public function complete(){
+		return $this->status == self::STATUS_COMPLETE;
+	}
+
+	public function to_output(){
+		if($this->status == self::STATUS_COMPLETE && isset($this->stored_file_id)){
+			return ['status'=>'complete', 'transfer'=>$this->transfer_id, 'file'=>$this->stored_file_id];
+		} else {
+			return ['status'=>'incomplete', 'transfer'=>$this->transfer_id];
+		}
+	}
+
+	public function __construct(
+		string $chunk,
+		int $range_start,
+		int $range_end,
+		private int $size_input,
+		private string $checksum_input,
+		string $storage,
+		string $dir,
+		string $subfolder = null,
+		private ?string $transfer_input = null,
+		public readonly ?string $name = null,
+		public readonly ?string $mime = null,
+	){
+		$this->chunk_size = strlen($chunk);
+		if($this->chunk_size == 0 || $range_start + $this->chunk_size - 1 != $range_end){
+			self::exception("Error in WildFileChunked: Invalid file chunk size ($this->chunk_size bytes, $range_start to $range_end)");
+		}
+		if(!preg_match('/^[0-9A-Fa-f]+$/', $checksum_input)){
+			self::exception("Error in WildFileChunked: Invalid checksum input (expected hexadecimal string)");
+		}
+		$this->transfer_id = strtoupper(substr($checksum_input, 0, 20));
+
+		$path_chunks = self::get_chunk_path($storage, $dir, $subfolder ?? '.chunked_upload');
+		$this->file_uri = $path_chunks.self::buffer_filename($this->transfer_id);
+		$this->progress_uri = $path_chunks.self::progress_filename($this->transfer_id);
+
+		$this->progress_lock();
+
+		$file = fopen($this->file_uri, 'c');
+		if($file === false){
+			self::exception("Error in WildFileChunked [fopen]");
+		}
+		self::file_write($file, $range_start, $chunk);
+
+		$this->update_progress();
+
+		self::log('WildFileChunked: '.$this->transfer_id."($range_start-$range_end/$size_input)|".$path_chunks);
+
+		if($this->progress < $size_input){
+			$this->status = self::STATUS_INCOMPLETE;
+		} else {
+			$this->validate_file();
+			$this->status = self::STATUS_COMPLETE;
+			if(unlink($this->progress_uri) === false){
+				self::log("Warning in WildFileChunked: Failed unlinking obsolete progress file");
+			}
+		}
+	}
+
+	private function progress_lock() {
+		// Open with mode 'c+' (read & write) so we can request advisory lock
+		$file = fopen($this->progress_uri, 'c+');
+		if($file === false){
+			self::exception("Error progress_lock [fopen]");
+		}
+		// lock the progress file with an advisory lock, so we can avoid race conditions
+		if(flock($file, LOCK_EX) === false){
+			self::exception("Error progress_lock [flock]");
+		}
+		$this->progress_file = $file;
+	}
+
+	private function update_progress(){
+		// read up to 64 bits of data
+		$bytes = fread($this->progress_file, 8);
+		if($bytes === false){
+			self::exception('Error update_progress [fread]');
+		} elseif($bytes === ''){
+			$previous_progress = 0;
+		} else {
+			// J: unsigned long long (always 64 bit, big endian byte order)
+			$progress_unpacked = unpack('J', $bytes);
+			if($progress_unpacked === false){
+				self::exception('Error update_progress [unpack]');
+			} else {
+				$previous_progress = $progress_unpacked[1];
+			}
+		}
+
+		$this->progress = $previous_progress + $this->chunk_size;
+
+		$bytes = pack('J', $this->progress);
+
+		// closing the progress file also releases the advisory lock
+		self::file_write($this->progress_file, 0, $bytes);
+		$this->progress_file = null;
+	}
+	private function validate_file(){
+		$this->file_size = filesize($this->file_uri);
+		if($this->file_size > $this->size_input){
+			self::exception("Error in WildFileChunked: $this->file_uri (file size doesn't match expected size, $file_size > $this->size_input)");
+		}
+		$this->checksum = hash_file('sha256',$this->file_uri);
+		if($this->checksum !== $this->checksum_input){
+			self::exception("Error in WildFileChunked: Checksum doesn't match input\n$this->checksum !== $this->checksum_input\n$this->size_input $this->file_size");
+		}
+		return true;
+	}
+	private static function file_write($file, int $seek, string $data) {
+		if(fseek($file, $seek) === -1){
+			self::exception("Error file_write [fseek]");
+		}
+		if(fwrite($file, $data) === false){
+			self::exception("Error file_write [fwrite]");
+		}
+		if(fclose($file) === false){
+			self::exception("Error file_write [fclose]");
+		}
+	}
+	private static function buffer_filename($transfer_id){
+		return $transfer_id.'.bin';
+	}
+	private static function progress_filename($transfer_id){
+		return $transfer_id.'_progress.bin';
+	}
+	private static function get_chunk_path($storage, $dir, $storage_subfolder){
+		$path = $storage.DIRECTORY_SEPARATOR.$dir.DIRECTORY_SEPARATOR.$storage_subfolder.DIRECTORY_SEPARATOR;
+		if(!is_dir($path)){
+			if(!mkdir($path)) {
+				self::exception('Error mkdir: '.$path);
+			}
+		}
+		return $path;
+	}
+	protected static function exception($message){
+		self::log($message,LOG_ERR);
+		throw new \Exception($message);
+	}
+	protected static function log($message,$priority = LOG_INFO){
+		syslog($priority,$message);
 	}
 }

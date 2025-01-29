@@ -13,16 +13,5 @@ CREATE TABLE `files` (
 	PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE `files_chunked_upload` (
-	`id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-	`checksum` char(64) NOT NULL DEFAULT '', -- required for chunked upload
-	`name` varchar(100) NOT NULL DEFAULT '',
-	`mime` varchar(128) NOT NULL DEFAULT '',
-	`size` int(10) unsigned NOT NULL,
-	`address` varchar(15) NOT NULL DEFAULT '',
-	`created` datetime DEFAULT NULL,
-	PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 CREATE USER `wildfile`@`localhost` IDENTIFIED BY 'Pa55w0rd';
 GRANT DELETE, INSERT, SELECT, UPDATE ON `wildfile`.* TO `wildfile`@`localhost`;
