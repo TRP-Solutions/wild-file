@@ -325,7 +325,11 @@ class WildFileOut {
 		return file_get_contents($this->file);
 	}
 	public function output(){
-		return readfile($this->file);
+		$handle = fopen($this->file,'r');
+		while (!feof($handle)) {
+			echo fgets($handle, 4096);
+		}
+		fclose($handle);
 	}
 	public function get_path(){
 		return $this->file;
@@ -341,6 +345,9 @@ class WildFileOut {
 class WildFileHeader {
 	public static function type($str){
 		header('Content-Type: '.$str);
+	}
+	public static function size($size): void{
+		header('Content-Length: '.$size);
 	}
 	public static function filename($filename,$download = false){
 		$download = $download ? 'attachment' : 'inline';

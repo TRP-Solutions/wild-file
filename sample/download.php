@@ -8,9 +8,10 @@ require_once('include.php');
 
 $wf = new WildFile($mysqli,STORAGE,'files');
 
-$file = $wf->get($_GET['file_id'],['mime','name']);
+$file = $wf->get($_GET['file_id'],['mime','name','size']);
 
 WildFileHeader::type($file->mime);
+WildFileHeader::size($file->size);
 WildFileHeader::filename($file->name,true);
 WildFileHeader::expires();
 
