@@ -4,24 +4,26 @@ WildFile is licensed under the Apache License 2.0 license
 https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 */
 declare(strict_types=1);
-require_once('include.php');
+require_once('../lib/WildFileChunkedUpload.php');
 
-$upload = WildFileChunked::from_input(STORAGE,'files');
-
-$fields = [];
-$fields['name'] = ['auto'=>WildFile::NAME];
-$fields['size'] = ['auto'=>WildFile::SIZE];
-$fields['mime'] = ['auto'=>WildFile::MIME];
-$fields['checksum'] = ['auto'=>WildFile::CHECKSUM];
-$fields['address'] = ['value'=>$_SERVER['REMOTE_ADDR']];
-$fields['created'] = ['value'=>'NOW()','noescape'=>true];
+$upload = WildFileChunkedUpload::from_input();
 
 if($upload->complete()){
-	// initialize database here
+	require_once('include.php');
+	$fields = [];
+	$fields['name'] = ['value'=>$upload->name];
+	$fields['size'] = ['value'=>$upload->file_size];
+	$fields['mime'] = ['value'=>$upload->mime];
+	$fields['checksum'] = ['value'=>$upload->checksum];
+	$fields['address'] = ['value'=>$_SERVER['REMOTE_ADDR']];
+	$fields['created'] = ['value'=>'NOW()','noescape'=>true];
+
 	$wf = new WildFile($mysqli,STORAGE,'files');
-	$wf->store_chunked_upload($upload, $fields);
+	$file_id = $wf->store_file($upload->file_uri, $fields);
+} else {
+	$file_id = null;
 }
 
-$result = $upload->to_output();
+$result = $upload->to_output($file_id);
 
 echo json_encode($result);
