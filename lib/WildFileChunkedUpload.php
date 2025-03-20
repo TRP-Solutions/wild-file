@@ -96,7 +96,10 @@ class WildFileChunkedUpload {
 		if(!preg_match('/^[0-9A-Fa-f]+$/', $checksum_input)){
 			self::exception("Error in WildFileChunkedUpload: Invalid checksum input (expected hexadecimal string)");
 		}
-		$this->transfer_id = strtoupper(substr($checksum_input, 0, 20));
+		if(is_string($transfer_input) && !preg_match('/^[0-9A-Fa-f]+$/', $transfer_input)){
+			self::exception("Error in WildFileChunkedUpload: Invalid transfer id (expected hexadecimal string)");
+		}
+		$this->transfer_id = strtoupper(substr($transfer_input ?? $checksum_input, 0, 20));
 
 		$path_chunks = self::get_chunk_path($storage, $dir, $subfolder ?? '.chunked_upload');
 		$this->file_uri = $path_chunks.self::buffer_filename($this->transfer_id);
