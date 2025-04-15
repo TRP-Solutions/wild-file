@@ -155,9 +155,9 @@ class WildFile {
 		$checksum = hash_file('sha256',$FILES['tmp_name']);
 		if(func_num_args()===4) $this->checksum_check($checksum,$checksum_input[$FILES['name']]);
 		$this->auto_value($field, [
-			self::NAME => $FILES['name'][$key],
-			self::SIZE => $FILES['size'][$key],
-			self::MIME => $FILES['type'][$key],
+			self::NAME => $FILES['name'],
+			self::SIZE => $FILES['size'],
+			self::MIME => $FILES['type'],
 			self::CHECKSUM => $checksum
 		]);
 		$this->validate_id($id);
