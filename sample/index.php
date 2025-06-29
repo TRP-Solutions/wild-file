@@ -6,7 +6,7 @@ https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
 declare(strict_types=1);
 require_once('include.php');
 
-$doc = new HealDocument();
+$doc = new \TRP\HealDocument\HealDocument();
 $html = $doc->el('html');
 $head = $html->el('head');
 $head->el('title')->te('wild-file :: sample');
