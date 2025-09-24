@@ -10,24 +10,8 @@ $doc = new \TRP\HealDocument\HealDocument();
 $html = $doc->el('html');
 $head = $html->el('head');
 $head->el('title')->te('wild-file :: sample');
-$head->el('script')->te(<<<JS
-	function upload_init(input, file){
-		file.progressElement = document.createElement('progress');
-		let p = document.createElement('p');
-		p.appendChild(file.progressElement);
-		p.appendChild(document.createTextNode(file.name));
-		input.parentElement.appendChild(p);
-	}
-	function upload_progress(input, file, value, max){
-		file.progressElement.value = value;
-		file.progressElement.max = max;
-	}
-	function upload_complete(chunked_file, input, file){
-		const parent = file.progressElement.parentElement;
-		parent.replaceChild(document.createTextNode("\u2705 "), file.progressElement);
-	}
-	JS);
 $head->el('script',['src'=>'../lib/WildFile.js']);
+$head->el('script',['src'=>'chunked_upload.js']);
 $body = $html->el('body')->el('center');
 
 $body->el('h2')->te('wild-file :: filelist');
@@ -85,11 +69,11 @@ $form->el('br');
 $form->el('input',['type'=>'submit','value'=>'Upload']);
 
 $body->el('h2')->te('wild-file :: chunked upload');
-$form = $body->el('form',['onsubmit'=>"WildFile.upload(event, this,'upload_chunked.php',upload_init,upload_progress,upload_complete);"]);
-$form->el('label',['for'=>'fileupload'])->te('Select file:');
-$form->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.checksum(this);']);
-$form->el('br');
-$form->el('input',['type'=>'submit','value'=>'Upload']);
+$div = $body->el('div');
+$div->el('label',['for'=>'fileupload'])->te('Select file:');
+$div->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.Filelist.get("upload123").add_input_files(this);']);
+$div->el('ul',['id'=>'chunked_upload_files']);
+$div->el('button',['type'=>'button','onclick'=>'WildFile.Filelist.get("upload123").upload("upload_chunked.php");'])->te('Upload');
 
 if($missing_thumbnail) {
 	$body->el('h2')->te('wild-file :: thumbnail');
