@@ -1,3 +1,6 @@
+-- WildFile is licensed under the Apache License 2.0 license
+-- https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
+
 CREATE DATABASE `wildfile`;
 USE `wildfile`;
 

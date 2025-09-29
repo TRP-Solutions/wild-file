@@ -1,5 +1,7 @@
-// TODO: use Filelist from WildFileList.js
-// TODO: move Filelist to WildFile.js
+/*
+WildFile is licensed under the Apache License 2.0 license
+https://github.com/TRP-Solutions/wild-file/blob/master/LICENSE
+*/
 
 function file_add(entry){
 	var progress = document.createElement('progress');
