@@ -31,9 +31,14 @@ function file_complete(entry){
 	delete(entry.progressElement);
 }
 
+function list_finish(filelist, successful_files, total_files){
+	console.log('Uploaded %o out of %o files.\n%o', successful_files, total_files, filelist);
+}
+
 WildFile.Filelist.get("upload123").options({
 	onadd: file_add,
 	onupload: file_upload,
 	onprogress: file_progress,
 	oncomplete: file_complete,
+	onlistfinish: list_finish,
 });
