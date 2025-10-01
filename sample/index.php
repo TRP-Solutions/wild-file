@@ -71,9 +71,9 @@ $form->el('input',['type'=>'submit','value'=>'Upload']);
 $body->el('h2')->te('wild-file :: chunked upload');
 $div = $body->el('div');
 $div->el('label',['for'=>'fileupload'])->te('Select file:');
-$div->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.Filelist.get("upload123").add_input_files(this);']);
+$div->el('input',['type'=>'file','name'=>'fileupload[]','id'=>'fileupload','multiple','required','onchange'=>'WildFile.list("upload123").add(this);']);
 $div->el('ul',['id'=>'chunked_upload_files']);
-$div->el('button',['type'=>'button','onclick'=>'WildFile.Filelist.get("upload123").upload("upload_chunked.php");'])->te('Upload');
+$div->el('button',['type'=>'button','onclick'=>'WildFile.list("upload123").upload("upload_chunked.php");'])->te('Upload');
 
 if($missing_thumbnail) {
 	$body->el('h2')->te('wild-file :: thumbnail');
